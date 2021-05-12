@@ -1,0 +1,161 @@
+---
+title: '5. LBB : Classification in Machine Learning I (C1) "Wholesale"'
+author: "Felicia Haliman"
+date: "`r format(Sys.Date(), '%B %e, %Y')`"
+output:
+  html_document:
+    theme: cosmo
+    highlight: tango
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Objective
+
+Pada kesempatan kali ini saya akan mencoba untuk mengklasifikasikan dengan menggunakan data `wholesale`, yang dimana nanti kita akan mencoba untuk eksplorasi target variabel `channel` untuk dapat dianalisis bagaimana pengaruh variabel-variabel yang sangat mempengaruhi dan dikelompokan sebagai channel tertentu. Algoritma yang akan saya gunakan yaitu menggunakan logistik regression dan k-nearest neighbor yang termasuk dalam supervised learning.
+
+## Library
+
+```{r warning = FALSE, message = FALSE}
+library(dplyr)
+library(gtools)
+library(gmodels)
+library(ggplot2)
+library(class)
+library(tidyr)
+library(caret)
+library(e1071)
+```
+
+## Read Data
+
+```{r}
+wholesale <- read.csv("Data/wholesale.csv")
+glimpse(wholesale)
+```
+Summary:\
+- `Channel` : jenis usaha, 1 = horeca (hotel/restoran/cafe) dan 2 = retail\
+- `Region` :  Wilayah customer, 1 = Lisbon; 2 = Oporto; 3 = lainnya
+
+## Clean Data
+```{r}
+anyNA(wholesale)
+colSums(is.na(wholesale))
+```
+Clean! No N/A
+
+## Correlation
+
+```{r}
+table(wholesale$Channel)
+cor(wholesale$Channel, wholesale$Region)
+```
+## Pre-Processing Data
+
+Kita akan melihat proporsi data terlebih dahulu
+```{r}
+wholesale$Channel %>% 
+  table() %>% 
+  prop.table()
+```
+Disini dapat kita lihat bahwa proporsi data tidak seimbang dan lebih banyak `horeca` dibandingkan `region`. Proporsi yang seimbang penting agar model klasifikasi mempelajari karakteristik kelas positif maupun negatif secara seimbang, tidak dari satu kelas saja, namun semua itu tergantung pada kebutuhan. Untuk kasus kali ini saya memutuskan untuk tidak melakukan resampling (menambah data).
+
+## Data Cross Validation
+
+```{r}
+set.seed(666)
+wholesale_clean <- wholesale %>% 
+  mutate(Channel = as.factor(Channel)) %>% 
+  select(-Region)
+wholesale_split <- sample(nrow(wholesale_clean), nrow(wholesale_clean)*0.6772727)
+wholesale_train <- wholesale_clean[wholesale_split,]
+wholesale_test <- wholesale_clean[-wholesale_split,]
+wholesale %>% nrow()
+```
+```{r}
+wholesale_train$Channel %>% 
+  table() %>% 
+  prop.table()
+
+wholesale_test$Channel %>% 
+  table() %>% 
+  prop.table()
+```
+
+# Logistic Regression
+
+## Interpretasi koef
+
+```{r}
+whole_clean <- wholesale %>% 
+  mutate(Channel = as.factor(Channel))
+```
+
+```{r}
+# fyi 1 = `Horeca`
+
+model0 <- glm(formula = Channel~1 , data = whole_clean, family = "binomial") # logistic regression, biner classification
+summary(model0)
+```
+```{r}
+sum_model0 <- summary(model0)
+sum_model0$coefficients[1]
+```
+```{r}
+inv.logit(-0.7413) #Peluang
+exp(-0.7413) #Probabilitas
+```
+Kesimpulan: Horeca memiliki peluang untuk menjual lebih banyak sebesar 32 kali dengan kemungkinan 47%.
+
+# k-nearest neighbor
+
+## Scalling dan pemilihan nilai k
+
+```{r}
+wholesale_x_train <- wholesale_train %>% 
+  select(-Channel) %>% 
+  scale()
+
+wholesale_y_train <- wholesale_train %>% 
+  select(Channel)
+
+wholesale_x_test <- wholesale_test %>% 
+  select(-Channel) %>% 
+  scale(center = attr(wholesale_x_train, "scaled:center") , 
+        scale = attr(wholesale_x_train, "scaled:scale"))
+
+wholesale_y_test <- wholesale_test %>% 
+  select(Channel)
+
+sqrt(nrow(wholesale_x_train))
+```
+## Evaluasi Model
+
+```{r}
+library(class)
+wholesale_knn <- knn(train = wholesale_x_train,
+                     test = wholesale_x_test,
+                     cl = wholesale_y_train$Channel,
+                     k = 17.23369)
+
+wholesale_y_train$Channel %>% 
+  table() %>% 
+  prop.table()
+
+confusionMatrix(wholesale_knn, reference = wholesale_y_test$Channel, positive = "2")
+```
+Kesimpulan: Hasil test memiliki akurasi 93% dengan P-Value hampir mencapai 10 yaitu 9,16.
+
+# `Conclusion`
+
+Melalui 2 model ini melalui data `wholesale`, dapat dilihat bahwa tingkat permodelan memiliki akurasi 93% dengan P-Value mencapai 10 yaitu 9,16, dan berdasarkan permodelan dari regressi logistik menunjukkan Horeca memiliki peluang untuk menjual lebih banyak sebesar 32 kali dengan kemungkinan 47%.
+
+Hal ini menunjukkan data tersebut dapat dipercaya dengan tingkat akurasi yang baik dan dari data tersebut memberikan kesimpulan bahwa Horeca untuk menjual lebih banyak dengan margin 32 kali, namun dengan tingkat persentase atau peluang dibawah dari 50%, hal ini menunjukkan bahwa horeca kemungkinan akan stag di penjualan grosir.
+
